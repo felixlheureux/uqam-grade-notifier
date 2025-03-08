@@ -49,5 +49,6 @@ func main() {
 				log.Fatal(err)
 			}
 		}
+		log.Println(course + " : " + newGrade)
 	}
 }
