@@ -175,4 +175,4 @@ Temporary Items
 main/config/dev.config.json
 main/data/grades.json
 dist
-.idea_old
+.idea
