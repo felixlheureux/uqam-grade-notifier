@@ -6,8 +6,8 @@ import (
 	"log"
 )
 
-func MustLoadConfig(c interface{}) {
-	data, err := ioutil.ReadFile("config.json")
+func MustLoadConfig(path string, c interface{}) {
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -9,6 +9,8 @@ import (
 	"log"
 )
 
+const config_path = "main/config.json"
+
 type config struct {
 	Username         string   `json:"username"`
 	Password         string   `json:"password"`
@@ -17,27 +19,31 @@ type config struct {
 	MailFrom         string   `json:"mail_from"`
 	Semester         string   `json:"semester"`
 	Courses          []string `json:"courses"`
+	StorePath        string   `json:"store_path"`
 }
 
 func main() {
 	config := config{}
-	helper.MustLoadConfig(&config)
+	helper.MustLoadConfig(config_path, &config)
 	token := auth.MustGenerateToken(config.Username, config.Password)
-
+	_store, err := store.New(config.StorePath)
+	if err != nil {
+		log.Fatal(err)
+	}
 	for _, course := range config.Courses {
 		newGrade, err := grade.FetchGrade(token, config.Semester, course)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		oldGrade := store.GetGrade(config.Semester, course)
-
+		oldGrade, err := _store.GetGrade(config.Semester, course)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if newGrade != oldGrade {
-			if err := store.SaveGrade(config.Semester, course, newGrade); err != nil {
+			if err := _store.SaveGrade(config.Semester, course, newGrade); err != nil {
 				log.Fatal(err)
 			}
-
-			if err = alert.SendEmail(config.MailTo, config.MailFrom, config.GmailAppPassword, course, newGrade); err != nil {
+			if err = alert.SendEmail(config.GmailAppPassword, config.MailFrom, config.MailTo, course, newGrade); err != nil {
 				log.Fatal(err)
 			}
 		}

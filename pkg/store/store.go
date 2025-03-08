@@ -3,24 +3,42 @@ package store
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 )
 
-const file = "grades.json"
-
-type GradeStore map[string]map[string]string
-
-func loadGrades() GradeStore {
-	grades := make(GradeStore)
-	file, err := ioutil.ReadFile(file)
-	if err != nil {
-		return grades
-	}
-	json.Unmarshal(file, &grades)
-	return grades
+type store struct {
+	path string
 }
 
-func SaveGrade(semester, course, grade string) error {
-	grades := loadGrades()
+func New(path string) (*store, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			ioutil.WriteFile(path, []byte("{}"), 0644)
+		} else {
+			return nil, err
+		}
+	}
+
+	return &store{path}, nil
+}
+
+type gradeStore map[string]map[string]string
+
+func (store *store) loadGrades() (gradeStore, error) {
+	grades := make(gradeStore)
+	file, err := ioutil.ReadFile(store.path)
+	if err != nil {
+		return nil, err
+	}
+	json.Unmarshal(file, &grades)
+	return grades, nil
+}
+
+func (store *store) SaveGrade(semester, course, grade string) error {
+	grades, err := store.loadGrades()
+	if err != nil {
+		return err
+	}
 	if grades[semester] == nil {
 		grades[semester] = make(map[string]string)
 	}
@@ -29,15 +47,18 @@ func SaveGrade(semester, course, grade string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(file, data, 0644)
+	return ioutil.WriteFile(store.path, data, 0644)
 }
 
-func GetGrade(semester, course string) string {
-	grades := loadGrades()
+func (store *store) GetGrade(semester, course string) (string, error) {
+	grades, err := store.loadGrades()
+	if err != nil {
+		return "", err
+	}
 	if semesterGrades, exists := grades[semester]; exists {
 		if grade, found := semesterGrades[course]; found {
-			return grade
+			return grade, nil
 		}
 	}
-	return "0.00"
+	return "0.00", nil
 }

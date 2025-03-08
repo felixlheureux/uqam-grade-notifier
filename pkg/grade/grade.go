@@ -9,7 +9,7 @@ import (
 
 const endpoint = "https://monportail.uqam.ca/apis/resultatActivite/identifiant"
 
-type GradeResponse struct {
+type response struct {
 	Data struct {
 		Resultats []struct {
 			Programmes []struct {
@@ -42,7 +42,7 @@ func FetchGrade(token, semester, course string) (string, error) {
 		return "", err
 	}
 
-	var response GradeResponse
+	var response response
 	if err := json.Unmarshal(body, &response); err != nil {
 		return "", err
 	}
