@@ -41,9 +41,5 @@ func main() {
 				log.Fatal(err)
 			}
 		}
-		err = alert.SendEmail(config.MailTo, config.MailFrom, config.GmailAppPassword, course, newGrade)
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
 }
