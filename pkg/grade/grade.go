@@ -7,14 +7,14 @@ import (
 	"net/http"
 )
 
-const ENDPOINT = "https://monportail.uqam.ca/apis/resultatActivite/identifiant"
+const endpoint = "https://monportail.uqam.ca/apis/resultatActivite/identifiant"
 
 type GradeResponse struct {
 	Data struct {
 		Resultats []struct {
 			Programmes []struct {
 				Activites []struct {
-					Total string `json:"total"`
+					Total float32 `json:"total"`
 				} `json:"activites"`
 			} `json:"programmes"`
 		} `json:"resultats"`
@@ -22,7 +22,7 @@ type GradeResponse struct {
 }
 
 func FetchGrade(token, semester, course string) (string, error) {
-	url := fmt.Sprintf("%s/%s/%s", ENDPOINT, semester, course)
+	url := fmt.Sprintf("%s/%s/%s", endpoint, semester, course)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -47,5 +47,5 @@ func FetchGrade(token, semester, course string) (string, error) {
 		return "", err
 	}
 
-	return response.Data.Resultats[0].Programmes[0].Activites[0].Total, nil
+	return fmt.Sprintf("%.2f", response.Data.Resultats[0].Programmes[0].Activites[0].Total), nil
 }

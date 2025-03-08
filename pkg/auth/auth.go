@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-const ENDPOINT = "https://monportail.uqam.ca/authentification"
+const endpoint = "https://monportail.uqam.ca/authentification"
 
 type response struct {
 	Token string `json:"token"`
@@ -24,7 +24,7 @@ func MustGenerateToken(user, pass string) string {
 		log.Fatal(err)
 	}
 
-	req, err := http.NewRequest("POST", ENDPOINT, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(payload))
 	if err != nil {
 		log.Fatal(err)
 	}
