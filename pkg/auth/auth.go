@@ -3,7 +3,6 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -41,7 +40,7 @@ func MustGenerateToken(user, pass string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(string(body))
+
 	var response response
 	if err := json.Unmarshal(body, &response); err != nil {
 		log.Fatal(err)
