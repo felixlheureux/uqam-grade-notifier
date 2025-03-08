@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/alert"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/auth"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/grade"
@@ -9,7 +10,7 @@ import (
 	"log"
 )
 
-const config_path = "main/config.json"
+var configPath = flag.String("config", "main/config/dev.config.json", "Path to the configuration file")
 
 type config struct {
 	Username         string   `json:"username"`
@@ -23,8 +24,9 @@ type config struct {
 }
 
 func main() {
+	flag.Parse() // Parse the flags
 	config := config{}
-	helper.MustLoadConfig(config_path, &config)
+	helper.MustLoadConfig(*configPath, &config)
 	token := auth.MustGenerateToken(config.Username, config.Password)
 	_store, err := store.New(config.StorePath)
 	if err != nil {

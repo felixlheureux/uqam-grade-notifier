@@ -18,7 +18,6 @@ func New(path string) (*store, error) {
 			return nil, err
 		}
 	}
-
 	return &store{path}, nil
 }
 

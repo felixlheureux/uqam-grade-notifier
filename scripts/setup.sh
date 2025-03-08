@@ -3,6 +3,7 @@ set -e
 
 # Variables
 APP_NAME="gnotifier"
+MAIN_FOLDER="main"
 
 # Define paths
 APP_DIR="/usr/local/bin"
@@ -17,15 +18,15 @@ sudo mkdir -p $CONFIG_DIR $LOG_DIR
 make build
 
 # Move executable to the appropriate location
-sudo mv $APP_NAME $APP_DIR/$APP_NAME
+sudo mv $DIST_FOLDER/$APP_NAME $APP_DIR/$APP_NAME
 sudo chmod +x $APP_DIR/$APP_NAME
 
 # Copy config and data files
-sudo cp config.json $CONFIG_DIR/config.json
-sudo cp grades.json $CONFIG_DIR/grades.json
+sudo cp $MAIN_FOLDER/config/prod.config.json $CONFIG_DIR/config.json
+sudo cp $MAIN_FOLDER/data/grades.json $CONFIG_DIR/grades.json
 
-# Create a cron job to run the app every hour
-echo "0 * * * * root $APP_DIR/$APP_NAME >> $LOG_DIR/$APP_NAME.log 2>&1" | sudo tee $CRON_FILE
+# Create a cron job to run the app every hour with the -config flag
+echo "0 * * * * root $APP_DIR/$APP_NAME -config $CONFIG_DIR/config.json >> $LOG_DIR/$APP_NAME.log 2>&1" | sudo tee $CRON_FILE
 sudo chmod 644 $CRON_FILE
 
 # Ensure cron service is running
