@@ -2,7 +2,7 @@
 set -e
 
 # Variables
-APP_NAME="GradeNotifier"
+APP_NAME="gnotifier"
 
 # Define paths
 APP_DIR="/usr/local/bin"

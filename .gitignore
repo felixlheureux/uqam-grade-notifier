@@ -172,6 +172,6 @@ Temporary Items
 
 # End of https://www.toptal.com/developers/gitignore/api/goland,go,macos
 
-config.json
-grades.json
+main/config.json
+main/grades.json
 dist

@@ -29,7 +29,7 @@ func SaveGrade(semester, course, grade string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(file, data, 0640)
+	return ioutil.WriteFile(file, data, 0644)
 }
 
 func GetGrade(semester, course string) string {
