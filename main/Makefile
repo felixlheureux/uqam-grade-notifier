@@ -1,6 +1,6 @@
 # Variables
 APP_NAME="gnotifier"
-DIST_FOLDER="dist"
+DIST_FOLDER="../dist"
 
 default: build
 
