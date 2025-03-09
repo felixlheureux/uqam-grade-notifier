@@ -27,9 +27,9 @@ cd ../$MAIN_FOLDER
 make
 sudo cp ../dist/$APP_NAME $APP_DIR
 sudo chmod +x $APP_DIR/$APP_NAME
-sudo cp config/prod.config.json $APP_DIR/config.json
+sudo cp config_j/prod.config_j.json $APP_DIR/config_j.json
 
-# Create a cron job to run the app every hour with the -config flag
+# Create a cron job to run the app every hour with the -config_j flag
 echo "Creating cron job to run $APP_NAME every hour"
 echo "run crontab -e"
 echo "add to bottom of file : @hourly $APP_DIR/$APP_NAME -config $APP_DIR/config.json"
