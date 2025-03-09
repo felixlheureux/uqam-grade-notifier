@@ -13,10 +13,10 @@ CONFIG_DIR="/etc/$APP_NAME"
 sudo apt update
 sudo apt install -y cron git make ufw wget
 wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz
-rm -rf /usr/local/go && tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin
 go version
-rm -f go1.24.1.linux-amd64.tar.gz
+sudo rm -f go1.24.1.linux-amd64.tar.gz
 
 # configure firewall
 sudo ufw default deny incoming
