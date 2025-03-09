@@ -9,8 +9,7 @@ MAIN_FOLDER="main"
 APP_DIR="$HOME/app"
 
 # install dependencies
-sudo apt update
-sudo apt install -y cron git make ufw wget
+sudo apt install -y cron make ufw wget
 wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz
 sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin
