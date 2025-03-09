@@ -21,7 +21,7 @@ sudo rm -f go1.24.1.linux-amd64.tar.gz
 # configure firewall
 sudo ufw default deny incoming
 sudo ufw allow OpenSSH
-sudo ufw enable -y
+sudo ufw enable
 
 # install the app
 cd ../$MAIN_FOLDER
