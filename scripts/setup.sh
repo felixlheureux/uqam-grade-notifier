@@ -6,7 +6,7 @@ APP_NAME="gnotifier"
 MAIN_FOLDER="main"
 
 # Define paths
-APP_DIR="/usr/local/bin"
+APP_DIR="~/app"
 CONFIG_DIR="/etc/$APP_NAME"
 
 # install dependencies
@@ -24,17 +24,17 @@ sudo ufw allow OpenSSH
 sudo ufw enable
 
 # install the app
+sudo mkdir -p $APP_DIR
 cd ../$MAIN_FOLDER
 make
 sudo cp ../dist/$APP_NAME $APP_DIR
 sudo chmod +x $APP_DIR/$APP_NAME
-sudo mkdir -p $CONFIG_DIR
-sudo cp config/prod.config.json $CONFIG_DIR/config.json
+sudo cp config/prod.config.json $APP_DIR/config.json
 
 # Create a cron job to run the app every hour with the -config flag
 echo "Creating cron job to run $APP_NAME every hour"
 echo "run crontab -e"
-echo "add to bottom of file : 0 * * * * root $APP_DIR/$APP_NAME -config $CONFIG_DIR/config.json"
+echo "add to bottom of file : @hourly root $APP_DIR/$APP_NAME -config $APP_DIR/config.json"
 echo "run sudo systemctl enable cron"
 echo "run sudo systemctl restart cron"
 
