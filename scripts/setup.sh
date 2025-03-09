@@ -32,7 +32,7 @@ sudo cp config/prod.config.json $APP_DIR/config.json
 # Create a cron job to run the app every hour with the -config flag
 echo "Creating cron job to run $APP_NAME every hour"
 echo "run crontab -e"
-echo "add to bottom of file : @hourly root $APP_DIR/$APP_NAME -config $APP_DIR/config.json"
+echo "add to bottom of file : @hourly $APP_DIR/$APP_NAME -config $APP_DIR/config.json"
 echo "run sudo systemctl enable cron"
 echo "run sudo systemctl restart cron"
 
