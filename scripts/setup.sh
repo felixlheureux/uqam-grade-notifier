@@ -6,8 +6,7 @@ APP_NAME="gnotifier"
 MAIN_FOLDER="main"
 
 # Define paths
-APP_DIR="~/app"
-CONFIG_DIR="/etc/$APP_NAME"
+APP_DIR="$HOME/app"
 
 # install dependencies
 sudo apt update
@@ -24,7 +23,7 @@ sudo ufw allow OpenSSH
 sudo ufw enable
 
 # install the app
-sudo mkdir -p $APP_DIR
+mkdir -p $APP_DIR
 cd ../$MAIN_FOLDER
 make
 sudo cp ../dist/$APP_NAME $APP_DIR
