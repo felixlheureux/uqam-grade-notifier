@@ -49,14 +49,14 @@ This script will:
 
 3. Create your configuration file:
    ```bash
-   cp main/config_j/prod.config_j.json config_j.json
+   cp main/config/prod.config.json config.json
    ```
 
 4. Edit the configuration with your personal information
 
 5. Run the application:
    ```bash
-   ./dist/gnotifier -config_j ./config_j.json
+   ./dist/gnotifier -config ./config.json
    ```
 
 ## ⚙️ Configuration

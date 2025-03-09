@@ -10,7 +10,7 @@ import (
 	"log"
 )
 
-var configPath = flag.String("config_j", "main/config_j/dev.config_j.json", "Path to the configuration file")
+var configPath = flag.String("config", "main/config/dev.config.json", "Path to the configuration file")
 
 type config struct {
 	Username         string   `json:"username"`
