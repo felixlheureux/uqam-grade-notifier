@@ -27,6 +27,7 @@ sudo ./scripts/setup.sh
 ```
 
 This script will:
+
 - Install Go and required dependencies
 - Build the application
 - Create the necessary directories
@@ -36,18 +37,21 @@ This script will:
 ### Option 2: Manual Installation
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/felixlheureux/uqam-grade-notifier.git
    cd uqam-grade-notifier
    ```
 
 2. Build the application:
+
    ```bash
    cd main
    make build
    ```
 
 3. Create your configuration file:
+
    ```bash
    cp main/config/prod.config.json config.json
    ```
@@ -78,16 +82,16 @@ Edit the `config.json` file with your personal information:
 
 ### Configuration Options Explained
 
-| Option | Description | Example |
-|--------|-------------|---------|
-| `username` | Your UQAM username | `"SERF12345678"` |
-| `password` | Your UQAM password | `"mypassword"` |
-| `gmail_app_password` | App-specific password for your Gmail account | `"abcd efgh ijkl mnop"` |
-| `mail_to` | Email where you want to receive notifications | `"your.email@example.com"` |
-| `mail_from` | Gmail address used to send notifications | `"your.gmail@gmail.com"` |
-| `semester` | Current semester code | `"20251"` (Winter 2025) |
-| `courses` | List of courses and group numbers to monitor | `["INF1132/10", "INF2050/30"]` |
-| `store_path` | Location to save grade history | `"/home/user/app/grades.json"` |
+| Option               | Description                                   | Example                        |
+| -------------------- | --------------------------------------------- | ------------------------------ |
+| `username`           | Your UQAM username                            | `"SERF12345678"`               |
+| `password`           | Your UQAM password                            | `"mypassword"`                 |
+| `gmail_app_password` | App-specific password for your Gmail account  | `"abcd efgh ijkl mnop"`        |
+| `mail_to`            | Email where you want to receive notifications | `"your.email@example.com"`     |
+| `mail_from`          | Gmail address used to send notifications      | `"your.gmail@gmail.com"`       |
+| `semester`           | Current semester code                         | `"20251"` (Winter 2025)        |
+| `courses`            | List of courses and group numbers to monitor  | `["INF1132/10", "INF2050/30"]` |
+| `store_path`         | Location to save grade history                | `"/home/user/app/grades.json"` |
 
 ### Gmail App Password Setup
 
@@ -114,11 +118,11 @@ For best results, set up a recurring scheduled task (cron job) to run the applic
 
 - `main/` - Application entry point and configuration
 - `pkg/` - Core functionality packages:
-    - `alert/` - Email notification handling
-    - `auth/` - UQAM authentication module
-    - `grade/` - Grade fetching logic
-    - `helper/` - Utility functions
-    - `store/` - Grade storage management
+  - `alert/` - Email notification handling
+  - `auth/` - UQAM authentication module
+  - `grade/` - Grade fetching logic
+  - `helper/` - Utility functions
+  - `store/` - Grade storage management
 - `scripts/` - Installation and maintenance scripts
 
 ## 🔒 Security Notes
