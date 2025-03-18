@@ -2,12 +2,13 @@ package main
 
 import (
 	"flag"
+	"log"
+
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/alert"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/auth"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/grade"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/helper"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/store"
-	"log"
 )
 
 var configPath = flag.String("config", "main/config/dev.config.json", "Path to the configuration file")
@@ -51,4 +52,5 @@ func main() {
 		}
 		log.Println(course + " : " + newGrade)
 	}
+	startServer()
 }
