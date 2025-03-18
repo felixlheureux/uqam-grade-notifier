@@ -1,15 +1,15 @@
 package store
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
+
+	"github.com/Masterminds/squirrel"
+	"github.com/felixlheureux/uqam-grade-notifier/pkg/db"
 )
 
 type CourseStore struct {
-	baseDir string
+	db *db.DB
 }
 
 type CourseData map[string]map[string]string
@@ -21,65 +21,83 @@ type GradeChange struct {
 	Semester string
 }
 
-func NewCourseStore(baseDir string) (*CourseStore, error) {
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create course store directory: %w", err)
+func NewCourseStore(db *db.DB) (*CourseStore, error) {
+	// Créer les tables si elles n'existent pas
+	if err := createTables(db); err != nil {
+		return nil, err
 	}
-	return &CourseStore{baseDir: baseDir}, nil
+	return &CourseStore{db: db}, nil
 }
 
-func (s *CourseStore) getFilePath(email string) string {
-	return filepath.Join(s.baseDir, fmt.Sprintf("%s.json", email))
-}
+func createTables(db *db.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS courses (
+			id VARCHAR(50) PRIMARY KEY,
+			email VARCHAR(255) NOT NULL,
+			semester VARCHAR(10) NOT NULL,
+			course_code VARCHAR(20) NOT NULL,
+			grade VARCHAR(10) NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(email, semester, course_code)
+		);
+	`
 
-func (s *CourseStore) load(email string) (CourseData, error) {
-	filePath := s.getFilePath(email)
-	data := make(CourseData)
-
-	// Si le fichier n'existe pas, retourner une map vide
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return data, nil
-	}
-
-	file, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read course file: %w", err)
-	}
-
-	if err := json.Unmarshal(file, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal course data: %w", err)
-	}
-
-	return data, nil
-}
-
-func (s *CourseStore) save(email string, data CourseData) error {
-	filePath := s.getFilePath(email)
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal course data: %w", err)
-	}
-
-	if err := ioutil.WriteFile(filePath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write course file: %w", err)
-	}
-
-	return nil
+	_, err := db.Exec(query)
+	return err
 }
 
 func (s *CourseStore) SaveCourses(email, semester string, courses map[string]string) ([]GradeChange, error) {
-	data, err := s.load(email)
-	if err != nil {
-		return nil, err
-	}
-
-	if data[semester] == nil {
-		data[semester] = make(map[string]string)
-	}
-
 	var changes []GradeChange
+
+	// Démarrer une transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("erreur lors du début de la transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Pour chaque cours
 	for course, grade := range courses {
-		if oldGrade, exists := data[semester][course]; exists && oldGrade != grade {
+		// Vérifier si le cours existe déjà
+		var oldGrade string
+		var courseID string
+		err := squirrel.Select("id", "grade").
+			From("courses").
+			Where(squirrel.Eq{
+				"email":       email,
+				"semester":    semester,
+				"course_code": course,
+			}).
+			RunWith(tx).
+			QueryRow().
+			Scan(&courseID, &oldGrade)
+
+		if err == sql.ErrNoRows {
+			// Nouveau cours
+			courseID = GenerateID(CoursePrefix)
+			_, err = squirrel.Insert("courses").
+				Columns("id", "email", "semester", "course_code", "grade").
+				Values(courseID, email, semester, course, grade).
+				RunWith(tx).
+				Exec()
+			if err != nil {
+				return nil, fmt.Errorf("erreur lors de l'insertion du cours: %w", err)
+			}
+		} else if err != nil {
+			return nil, fmt.Errorf("erreur lors de la vérification du cours: %w", err)
+		} else if oldGrade != grade {
+			// Mise à jour de la note
+			_, err = squirrel.Update("courses").
+				Set("grade", grade).
+				Set("updated_at", squirrel.Expr("CURRENT_TIMESTAMP")).
+				Where(squirrel.Eq{"id": courseID}).
+				RunWith(tx).
+				Exec()
+			if err != nil {
+				return nil, fmt.Errorf("erreur lors de la mise à jour de la note: %w", err)
+			}
+
 			changes = append(changes, GradeChange{
 				Course:   course,
 				OldGrade: oldGrade,
@@ -87,86 +105,144 @@ func (s *CourseStore) SaveCourses(email, semester string, courses map[string]str
 				Semester: semester,
 			})
 		}
-		data[semester][course] = grade
 	}
 
-	if err := s.save(email, data); err != nil {
-		return nil, err
+	// Valider la transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("erreur lors de la validation de la transaction: %w", err)
 	}
 
 	return changes, nil
 }
 
 func (s *CourseStore) GetCourses(email, semester string) (map[string]string, error) {
-	data, err := s.load(email)
+	rows, err := squirrel.Select("course_code", "grade").
+		From("courses").
+		Where(squirrel.Eq{
+			"email":    email,
+			"semester": semester,
+		}).
+		RunWith(s.db).
+		Query()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erreur lors de la récupération des cours: %w", err)
+	}
+	defer rows.Close()
+
+	courses := make(map[string]string)
+	for rows.Next() {
+		var course, grade string
+		if err := rows.Scan(&course, &grade); err != nil {
+			return nil, fmt.Errorf("erreur lors de la lecture des cours: %w", err)
+		}
+		courses[course] = grade
 	}
 
-	if courses, exists := data[semester]; exists {
-		return courses, nil
-	}
-
-	return make(map[string]string), nil
+	return courses, nil
 }
 
 func (s *CourseStore) DeleteCourse(email, semester, course string) error {
-	data, err := s.load(email)
+	var courseID string
+	err := squirrel.Select("id").
+		From("courses").
+		Where(squirrel.Eq{
+			"email":       email,
+			"semester":    semester,
+			"course_code": course,
+		}).
+		RunWith(s.db).
+		QueryRow().
+		Scan(&courseID)
+
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("cours non trouvé")
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("erreur lors de la récupération de l'ID du cours: %w", err)
 	}
 
-	if _, exists := data[semester]; exists {
-		delete(data[semester], course)
-		if len(data[semester]) == 0 {
-			delete(data, semester)
-		}
-		return s.save(email, data)
+	if err := ValidateID(courseID, CoursePrefix); err != nil {
+		return fmt.Errorf("ID de cours invalide: %w", err)
+	}
+
+	result, err := squirrel.Delete("courses").
+		Where(squirrel.Eq{"id": courseID}).
+		RunWith(s.db).
+		Exec()
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression du cours: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erreur lors de la vérification de la suppression: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("cours non trouvé")
 	}
 
 	return nil
 }
 
 func (s *CourseStore) UpdateGrade(email, semester, course, grade string) (*GradeChange, error) {
-	data, err := s.load(email)
+	var oldGrade string
+	var courseID string
+	err := squirrel.Select("id", "grade").
+		From("courses").
+		Where(squirrel.Eq{
+			"email":       email,
+			"semester":    semester,
+			"course_code": course,
+		}).
+		RunWith(s.db).
+		QueryRow().
+		Scan(&courseID, &oldGrade)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("cours non trouvé")
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erreur lors de la récupération de la note: %w", err)
 	}
 
-	if _, exists := data[semester]; !exists {
-		return nil, fmt.Errorf("semester %s does not exist", semester)
-	}
-
-	oldGrade, exists := data[semester][course]
-	if !exists {
-		return nil, fmt.Errorf("course %s does not exist in semester %s", course, semester)
+	if err := ValidateID(courseID, CoursePrefix); err != nil {
+		return nil, fmt.Errorf("ID de cours invalide: %w", err)
 	}
 
 	if oldGrade == grade {
 		return nil, nil
 	}
 
-	change := &GradeChange{
+	_, err = squirrel.Update("courses").
+		Set("grade", grade).
+		Set("updated_at", squirrel.Expr("CURRENT_TIMESTAMP")).
+		Where(squirrel.Eq{"id": courseID}).
+		RunWith(s.db).
+		Exec()
+	if err != nil {
+		return nil, fmt.Errorf("erreur lors de la mise à jour de la note: %w", err)
+	}
+
+	return &GradeChange{
 		Course:   course,
 		OldGrade: oldGrade,
 		NewGrade: grade,
 		Semester: semester,
-	}
-
-	data[semester][course] = grade
-	if err := s.save(email, data); err != nil {
-		return nil, err
-	}
-
-	return change, nil
+	}, nil
 }
 
 func (s *CourseStore) DeleteCourses(email, semester string) error {
-	data, err := s.load(email)
+	_, err := squirrel.Delete("courses").
+		Where(squirrel.Eq{
+			"email":    email,
+			"semester": semester,
+		}).
+		RunWith(s.db).
+		Exec()
 	if err != nil {
-		return err
+		return fmt.Errorf("erreur lors de la suppression des cours: %w", err)
 	}
 
-	delete(data, semester)
-	return s.save(email, data)
+	return nil
 }

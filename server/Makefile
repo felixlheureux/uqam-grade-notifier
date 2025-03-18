@@ -1,5 +1,5 @@
 # Variables
-APP_NAME="gnotifier"
+APP_NAME="gnotifier-server"
 DIST_FOLDER="../dist"
 
 default: build
@@ -11,4 +11,7 @@ build:
 clean:
 	rm -rf $(DIST_FOLDER)
 
-.PHONY: default build clean
+run:
+	./$(DIST_FOLDER)/$(APP_NAME) -config config.json
+
+.PHONY: default build clean run 

@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 )
 
@@ -13,7 +12,7 @@ type store struct {
 func New(path string) (*store, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			ioutil.WriteFile(path, []byte("{}"), 0644)
+			os.WriteFile(path, []byte("{}"), 0644)
 		} else {
 			return nil, err
 		}
@@ -25,7 +24,7 @@ type gradeStore map[string]map[string]string
 
 func (store *store) loadGrades() (gradeStore, error) {
 	grades := make(gradeStore)
-	file, err := ioutil.ReadFile(store.path)
+	file, err := os.ReadFile(store.path)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +45,7 @@ func (store *store) SaveGrade(semester, course, grade string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(store.path, data, 0644)
+	return os.WriteFile(store.path, data, 0644)
 }
 
 func (store *store) GetGrade(semester, course string) (string, error) {

@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -125,140 +123,103 @@ func (h *Handler) Login(c echo.Context) error {
 	})
 }
 
-func (h *Handler) SaveCourses(c echo.Context) error {
-	// Vérifier la session
-	sessionCookie, err := c.Cookie("session")
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
-	}
+// RequireAuth est un middleware qui vérifie l'authentification
+func (h *Handler) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		cookie, err := c.Cookie("session")
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Non authentifié")
+		}
 
-	claims, err := h.tokenManager.ValidateSessionToken(sessionCookie.Value)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session expirée")
+		email, err := h.tokenStore.ValidateSessionToken(cookie.Value)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
+		}
+
+		c.Set("email", email)
+		return next(c)
 	}
+}
+
+// SaveCourses sauvegarde les cours d'un utilisateur pour un semestre donné
+func (h *Handler) SaveCourses(c echo.Context) error {
+	email := c.Get("email").(string)
+	semester := c.Param("semester")
 
 	var req requestCourses
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Format de requête invalide")
 	}
 
-	// Valider le format des notes
-	for course, grade := range req.Courses {
-		if !isValidGrade(grade) {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Format de note invalide pour le cours %s", course))
-		}
-	}
-
-	changes, err := h.courseStore.SaveCourses(claims.Email, req.Semester, req.Courses)
+	changes, err := h.courseStore.SaveCourses(email, semester, req.Courses)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur lors de la sauvegarde des cours")
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	// Envoyer des notifications pour les changements de notes
-	for _, change := range changes {
-		subject := "Modification de note"
-		body := fmt.Sprintf("La note du cours %s pour le semestre %s a été modifiée de %s à %s.",
-			change.Course, change.Semester, change.OldGrade, change.NewGrade)
-
-		if err := alert.SendEmail(h.emailPass, h.emailFrom, claims.Email, subject, body); err != nil {
-			// Log l'erreur mais ne pas bloquer la réponse
-			log.Printf("Erreur lors de l'envoi de la notification: %v", err)
-		}
-	}
-
-	return c.JSON(http.StatusOK, map[string]string{"message": "Cours sauvegardés avec succès"})
+	return c.JSON(http.StatusOK, changes)
 }
 
+// GetCourses récupère les cours d'un utilisateur pour un semestre donné
 func (h *Handler) GetCourses(c echo.Context) error {
-	// Vérifier la session
-	sessionCookie, err := c.Cookie("session")
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
-	}
+	email := c.Get("email").(string)
+	semester := c.Param("semester")
 
-	claims, err := h.tokenManager.ValidateSessionToken(sessionCookie.Value)
+	courses, err := h.courseStore.GetCourses(email, semester)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session expirée")
-	}
-
-	semester := c.QueryParam("semester")
-	if semester == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Le paramètre semester est requis")
-	}
-
-	courses, err := h.courseStore.GetCourses(claims.Email, semester)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur lors de la récupération des cours")
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
 	return c.JSON(http.StatusOK, courses)
 }
 
-func (h *Handler) UpdateGrade(c echo.Context) error {
-	// Vérifier la session
-	sessionCookie, err := c.Cookie("session")
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
-	}
-
-	claims, err := h.tokenManager.ValidateSessionToken(sessionCookie.Value)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session expirée")
-	}
-
+// DeleteCourse supprime un cours spécifique
+func (h *Handler) DeleteCourse(c echo.Context) error {
+	email := c.Get("email").(string)
 	semester := c.Param("semester")
 	course := c.Param("course")
 
-	var req requestGradeUpdate
+	if err := h.courseStore.DeleteCourse(email, semester, course); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// UpdateGrade met à jour la note d'un cours
+func (h *Handler) UpdateGrade(c echo.Context) error {
+	email := c.Get("email").(string)
+	semester := c.Param("semester")
+	course := c.Param("course")
+
+	var req struct {
+		Grade string `json:"grade"`
+	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Format de requête invalide")
 	}
 
-	// Valider le format de la note
-	if !isValidGrade(req.Grade) {
-		return echo.NewHTTPError(http.StatusBadRequest, "Format de note invalide")
-	}
-
-	change, err := h.courseStore.UpdateGrade(claims.Email, semester, course, req.Grade)
+	change, err := h.courseStore.UpdateGrade(email, semester, course, req.Grade)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	if change != nil {
-		// Envoyer une notification
-		subject := "Modification de note"
-		body := fmt.Sprintf("La note du cours %s pour le semestre %s a été modifiée de %s à %s.",
-			change.Course, change.Semester, change.OldGrade, change.NewGrade)
-
-		if err := alert.SendEmail(h.emailPass, h.emailFrom, claims.Email, subject, body); err != nil {
-			// Log l'erreur mais ne pas bloquer la réponse
-			log.Printf("Erreur lors de l'envoi de la notification: %v", err)
-		}
+	if change == nil {
+		return c.NoContent(http.StatusNoContent)
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Note mise à jour avec succès"})
+	return c.JSON(http.StatusOK, change)
 }
 
-func (h *Handler) DeleteCourse(c echo.Context) error {
-	// Vérifier la session
-	sessionCookie, err := c.Cookie("session")
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
-	}
-
-	claims, err := h.tokenManager.ValidateSessionToken(sessionCookie.Value)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Session expirée")
-	}
-
+// DeleteCourses supprime tous les cours d'un semestre
+func (h *Handler) DeleteCourses(c echo.Context) error {
+	email := c.Get("email").(string)
 	semester := c.Param("semester")
-	course := c.Param("course")
 
-	if err := h.courseStore.DeleteCourse(claims.Email, semester, course); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur lors de la suppression du cours")
+	if err := h.courseStore.DeleteCourses(email, semester); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Cours supprimé avec succès"})
+	return c.NoContent(http.StatusNoContent)
 }
 
 // isValidGrade vérifie si la note est dans un format valide (nombre entre 0 et 100 avec 2 décimales)

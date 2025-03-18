@@ -1,0 +1,6 @@
+{
+  "db_conn_string": "postgres://user:password@localhost:5432/uqam_grade_notifier?sslmode=disable",
+  "gmail_app_password": "your_app_password",
+  "mail_from": "your_email@gmail.com",
+  "encryption_key": "your_32_byte_encryption_key_here"
+}
