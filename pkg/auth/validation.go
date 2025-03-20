@@ -9,7 +9,7 @@ const allowedDomain = "@ens.uqam.ca"
 
 func ValidateEmail(email string) error {
 	if !strings.HasSuffix(email, allowedDomain) {
-		return fmt.Errorf("seuls les emails du domaine %s sont autorisés", allowedDomain)
+		return fmt.Errorf("only emails from domain %s are allowed", allowedDomain)
 	}
 	return nil
 }

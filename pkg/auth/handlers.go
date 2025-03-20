@@ -6,27 +6,27 @@ import (
 	"time"
 
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/alert"
-	"github.com/felixlheureux/uqam-grade-notifier/pkg/store"
+	"github.com/felixlheureux/uqam-grade-notifier/pkg/domain"
+	"github.com/felixlheureux/uqam-grade-notifier/pkg/httperror"
+	"github.com/felixlheureux/uqam-grade-notifier/pkg/service"
 	"github.com/labstack/echo/v4"
 )
 
 type Handler struct {
-	tokenStore   *store.TokenStore
-	tokenManager *TokenManager
-	courseStore  *store.CourseStore
-	emailPass    string
-	emailFrom    string
-	baseURL      string
+	authService   *service.AuthService
+	courseService *service.CourseService
+	emailPass     string
+	emailFrom     string
+	baseURL       string
 }
 
-func NewHandler(tokenStore *store.TokenStore, tokenManager *TokenManager, courseStore *store.CourseStore, emailPass, emailFrom, baseURL string) *Handler {
+func NewHandler(authService *service.AuthService, courseService *service.CourseService, emailPass, emailFrom, baseURL string) *Handler {
 	return &Handler{
-		tokenStore:   tokenStore,
-		tokenManager: tokenManager,
-		courseStore:  courseStore,
-		emailPass:    emailPass,
-		emailFrom:    emailFrom,
-		baseURL:      baseURL,
+		authService:   authService,
+		courseService: courseService,
+		emailPass:     emailPass,
+		emailFrom:     emailFrom,
+		baseURL:       baseURL,
 	}
 }
 
@@ -46,28 +46,28 @@ type requestGradeUpdate struct {
 func (h *Handler) RequestLogin(c echo.Context) error {
 	var req requestLogin
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+		return httperror.CoreRequestBindingFailed(err)
 	}
 
 	if err := ValidateEmail(req.Email); err != nil {
-		return echo.NewHTTPError(http.StatusForbidden, err.Error())
+		return httperror.CoreRequestValidationFailed(err)
 	}
 
-	token, err := h.tokenManager.GenerateToken(req.Email, 24*time.Hour)
+	token, err := h.authService.GenerateToken(req.Email, 24*time.Hour)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
+		return httperror.CoreUnknownError(err)
 	}
 
-	if err := h.tokenStore.SaveToken(req.Email, token); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to save token")
+	if err := h.authService.SaveToken(req.Email, token); err != nil {
+		return httperror.CoreUnknownError(err)
 	}
 
 	loginURL := h.baseURL + "/auth/login?token=" + token
-	subject := "Connexion à votre compte"
-	body := "Cliquez sur le lien suivant pour vous connecter : " + loginURL
+	subject := "Login to your account"
+	body := "Click on the following link to log in: " + loginURL
 
 	if err := alert.SendEmail(h.emailPass, h.emailFrom, req.Email, subject, body); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to send email")
+		return httperror.CoreUnknownError(err)
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
@@ -78,42 +78,39 @@ func (h *Handler) RequestLogin(c echo.Context) error {
 func (h *Handler) Login(c echo.Context) error {
 	tokenString := c.QueryParam("token")
 	if tokenString == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Token is required")
+		return httperror.CoreRequestValidationFailed(nil)
 	}
 
-	claims, err := h.tokenManager.ValidateToken(tokenString)
+	claims, err := h.authService.ValidateToken(tokenString)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid or expired token")
+		return httperror.CoreUnauthorized(err)
 	}
 
-	// Vérifier que le token est bien celui stocké pour cet email
-	storedToken, err := h.tokenStore.GetToken(claims.Email)
+	storedToken, err := h.authService.GetToken(claims.Email)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get token")
+		return httperror.CoreUnknownError(err)
 	}
 
 	if storedToken != tokenString {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+		return httperror.CoreUnauthorized(nil)
 	}
 
-	if err := h.tokenStore.DeleteToken(claims.Email); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete token")
+	if err := h.authService.DeleteToken(claims.Email); err != nil {
+		return httperror.CoreUnknownError(err)
 	}
 
-	// Générer le token de session
-	sessionToken, err := h.tokenManager.GenerateSessionToken(claims.Email)
+	sessionToken, err := h.authService.GenerateSessionToken(claims.Email)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate session token")
+		return httperror.CoreUnknownError(err)
 	}
 
-	// Créer le cookie de session
 	cookie := &http.Cookie{
 		Name:     "session",
 		Value:    sessionToken,
 		Path:     "/",
-		MaxAge:   7 * 24 * 60 * 60, // 7 jours
+		MaxAge:   7 * 24 * 60 * 60,
 		HttpOnly: true,
-		Secure:   true, // Pour HTTPS
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	}
 	c.SetCookie(cookie)
@@ -123,17 +120,17 @@ func (h *Handler) Login(c echo.Context) error {
 	})
 }
 
-// RequireAuth est un middleware qui vérifie l'authentification
+// RequireAuth is a middleware that checks authentication
 func (h *Handler) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		cookie, err := c.Cookie("session")
 		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "Non authentifié")
+			return httperror.CoreUnauthorized(err)
 		}
 
-		email, err := h.tokenStore.ValidateSessionToken(cookie.Value)
+		email, err := h.authService.ValidateSessionToken(cookie.Value)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "Session invalide")
+			return httperror.CoreUnauthorized(err)
 		}
 
 		c.Set("email", email)
@@ -141,88 +138,93 @@ func (h *Handler) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// SaveCourses sauvegarde les cours d'un utilisateur pour un semestre donné
+// SaveCourses saves a user's courses for a given semester
 func (h *Handler) SaveCourses(c echo.Context) error {
 	email := c.Get("email").(string)
 	semester := c.Param("semester")
 
 	var req requestCourses
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Format de requête invalide")
+		return httperror.CoreRequestBindingFailed(err)
 	}
 
-	changes, err := h.courseStore.SaveCourses(email, semester, req.Courses)
+	ctx := domain.NewContext(c.Request(), c.Response())
+	input := domain.CourseCreateInput{
+		Email:    email,
+		Semester: semester,
+		Courses:  req.Courses,
+	}
+
+	course, err := h.courseService.Create(ctx, input)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return httperror.CoreUnknownError(err)
 	}
 
-	return c.JSON(http.StatusOK, changes)
+	return c.JSON(http.StatusOK, course)
 }
 
-// GetCourses récupère les cours d'un utilisateur pour un semestre donné
+// GetCourses retrieves a user's courses for a given semester
 func (h *Handler) GetCourses(c echo.Context) error {
-	email := c.Get("email").(string)
-	semester := c.Param("semester")
-
-	courses, err := h.courseStore.GetCourses(email, semester)
+	ctx := domain.NewContext(c.Request(), c.Response())
+	courses, err := h.courseService.Get(ctx)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return httperror.CoreUnknownError(err)
 	}
 
 	return c.JSON(http.StatusOK, courses)
 }
 
-// DeleteCourse supprime un cours spécifique
+// DeleteCourse deletes a specific course
 func (h *Handler) DeleteCourse(c echo.Context) error {
-	email := c.Get("email").(string)
-	semester := c.Param("semester")
 	course := c.Param("course")
 
-	if err := h.courseStore.DeleteCourse(email, semester, course); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	ctx := domain.NewContext(c.Request(), c.Response())
+	if err := h.courseService.Delete(ctx, course); err != nil {
+		return httperror.CoreUnknownError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-// UpdateGrade met à jour la note d'un cours
+// UpdateGrade updates a course grade
 func (h *Handler) UpdateGrade(c echo.Context) error {
-	email := c.Get("email").(string)
-	semester := c.Param("semester")
 	course := c.Param("course")
 
-	var req struct {
-		Grade string `json:"grade"`
-	}
+	var req requestGradeUpdate
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Format de requête invalide")
+		return httperror.CoreRequestBindingFailed(err)
 	}
 
-	change, err := h.courseStore.UpdateGrade(email, semester, course, req.Grade)
+	if !isValidGrade(req.Grade) {
+		return httperror.CoreRequestValidationFailed(nil)
+	}
+
+	ctx := domain.NewContext(c.Request(), c.Response())
+	input := domain.CourseUpdateInput{
+		Grade: req.Grade,
+	}
+
+	updatedCourse, err := h.courseService.Update(ctx, course, input)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return httperror.CoreUnknownError(err)
 	}
 
-	if change == nil {
-		return c.NoContent(http.StatusNoContent)
-	}
-
-	return c.JSON(http.StatusOK, change)
+	return c.JSON(http.StatusOK, updatedCourse)
 }
 
-// DeleteCourses supprime tous les cours d'un semestre
+// DeleteCourses deletes all courses for a semester
 func (h *Handler) DeleteCourses(c echo.Context) error {
-	email := c.Get("email").(string)
 	semester := c.Param("semester")
 
-	if err := h.courseStore.DeleteCourses(email, semester); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	ctx := domain.NewContext(c.Request(), c.Response())
+	if err := h.courseService.Destroy(ctx, semester); err != nil {
+		return httperror.CoreUnknownError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-// isValidGrade vérifie si la note est dans un format valide (nombre entre 0 et 100 avec 2 décimales)
+// isValidGrade checks if the grade is in a valid format (number between 0 and 100 with 2 decimals)
 func isValidGrade(grade string) bool {
 	gradeFloat, err := strconv.ParseFloat(grade, 64)
 	if err != nil {

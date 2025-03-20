@@ -1,0 +1,20 @@
+# Script to install Docker and deploy the application
+
+# Docker configuration
+cd /tmp
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Create application directory
+sudo mkdir -p /opt/uqam-grade-notifier
+cd /opt/uqam-grade-notifier
+
+# Clone the repository
+sudo git clone https://github.com/felixlheureux/uqam-grade-notifier.git .
+
+# Build and start the application with Docker
+sudo docker compose up -d --build 

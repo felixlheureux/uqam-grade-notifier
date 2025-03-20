@@ -1,0 +1,8 @@
+# GCP Configuration
+gcp_project_id = "your-project-id"
+region         = "us-east1"
+machine_type   = "e2-micro"
+
+# Project Configuration
+project        = "uqam-grade-notifier"
+environment    = "prod" 

@@ -1,0 +1,5 @@
+project_id = "votre-projet-id"
+region     = "us-central1"
+zone       = "us-central1-a"
+ssh_user   = "votre-utilisateur"
+ssh_pub_key_path = "~/.ssh/id_rsa.pub" 

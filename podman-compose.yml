@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '443:443'
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:Z
+      - ./nginx/ssl:/etc/nginx/ssl:Z
+    depends_on:
+      - server
+      - frontend
+    networks:
+      - app-network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      - DB_CONN_STRING=postgres://gnotifier:${DB_PASSWORD}@db:5432/uqam_grade_notifier?sslmode=disable
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=uqam_grade_notifier
+      - POSTGRES_USER=gnotifier
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:Z
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt:Z
+      - ./nginx/conf.d:/etc/nginx/conf.d:Z
+    command: certonly --webroot --webroot-path=/var/www/html --email votre-email@example.com -d votre-domaine.com --agree-tos --no-eff-email
+
+  db-backup:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:Z
+      - ./backups:/backups:Z
+    environment:
+      - POSTGRES_DB=uqam_grade_notifier
+      - POSTGRES_USER=gnotifier
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    entrypoint: |
+      /bin/sh -c '
+      while true; do
+        pg_dump -h db -U gnotifier uqam_grade_notifier > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql
+        find /backups -type f -mtime +7 -delete
+        sleep 86400
+      done
+      '
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -25,18 +25,18 @@ type Config struct {
 }
 
 func setupLogging(logPath string) (*os.File, error) {
-	// Créer le dossier logs s'il n'existe pas
+	// Create logs directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
-		return nil, fmt.Errorf("erreur lors de la création du dossier logs: %v", err)
+		return nil, fmt.Errorf("error creating logs directory: %v", err)
 	}
 
-	// Ouvrir le fichier de log en mode append
+	// Open log file in append mode
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil, fmt.Errorf("erreur lors de l'ouverture du fichier de log: %v", err)
+		return nil, fmt.Errorf("error opening log file: %v", err)
 	}
 
-	// Configurer le logger pour écrire dans le fichier
+	// Configure logger to write to file
 	log.SetOutput(logFile)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
@@ -44,121 +44,121 @@ func setupLogging(logPath string) (*os.File, error) {
 }
 
 func main() {
-	configPath := flag.String("config", "cron/config.json", "Chemin du fichier de configuration")
+	configPath := flag.String("config", "cron/config.json", "Path to configuration file")
 	flag.Parse()
 
 	var cfg Config
 	helper.MustLoadConfig(*configPath, &cfg)
 
-	// Configurer le logging
+	// Configure logging
 	logFile, err := setupLogging(cfg.LogPath)
 	if err != nil {
-		fmt.Printf("Erreur lors de la configuration des logs: %v\n", err)
+		fmt.Printf("Error configuring logs: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
-	log.Printf("Démarrage de la vérification des notes")
+	log.Printf("Starting grade check")
 
-	// Initialiser la connexion à la base de données
+	// Initialize database connection
 	database, err := db.New(cfg.DBConnString)
 	if err != nil {
-		log.Printf("Erreur lors de la connexion à la base de données: %v", err)
+		log.Printf("Error connecting to database: %v", err)
 		os.Exit(1)
 	}
 	defer database.Close()
 
-	// Initialiser les stores
+	// Initialize stores
 	userStore, err := store.NewUserStore(database, []byte(cfg.EncryptionKey))
 	if err != nil {
-		log.Printf("Erreur lors de l'initialisation du store utilisateur: %v", err)
+		log.Printf("Error initializing user store: %v", err)
 		os.Exit(1)
 	}
 
 	courseStore, err := store.NewCourseStore(database)
 	if err != nil {
-		log.Printf("Erreur lors de l'initialisation du store des cours: %v", err)
+		log.Printf("Error initializing course store: %v", err)
 		os.Exit(1)
 	}
 
-	// Récupérer tous les utilisateurs
+	// Get all users
 	emails, err := userStore.GetAllUsers()
 	if err != nil {
-		log.Printf("Erreur lors de la récupération des utilisateurs: %v", err)
+		log.Printf("Error retrieving users: %v", err)
 		os.Exit(1)
 	}
 
 	if len(emails) == 0 {
-		log.Printf("Aucun utilisateur trouvé")
+		log.Printf("No users found")
 		os.Exit(0)
 	}
 
-	log.Printf("Vérification des notes pour %d utilisateurs", len(emails))
+	log.Printf("Checking grades for %d users", len(emails))
 
-	// Pour chaque utilisateur
+	// For each user
 	for _, email := range emails {
-		log.Printf("Traitement de l'utilisateur %s", email)
+		log.Printf("Processing user %s", email)
 
-		// Récupérer les identifiants UQAM
+		// Get UQAM credentials
 		uqamUsername, uqamPassword, err := userStore.GetUser(email)
 		if err != nil {
-			log.Printf("Erreur pour l'utilisateur %s: %v", email, err)
+			log.Printf("Error for user %s: %v", email, err)
 			continue
 		}
 
-		// Générer le token UQAM
+		// Generate UQAM token
 		token := auth.MustGenerateToken(uqamUsername, uqamPassword)
 
-		// Récupérer les cours de l'utilisateur
-		courses, err := courseStore.GetCourses(email, "20251") // TODO: Gérer les différents semestres
+		// Get user's courses
+		courses, err := courseStore.GetCourses(email, "20251") // TODO: Handle different semesters
 		if err != nil {
-			log.Printf("Erreur pour l'utilisateur %s: %v", email, err)
+			log.Printf("Error for user %s: %v", email, err)
 			continue
 		}
 
 		if len(courses) == 0 {
-			log.Printf("Aucun cours trouvé pour l'utilisateur %s", email)
+			log.Printf("No courses found for user %s", email)
 			continue
 		}
 
-		log.Printf("Vérification de %d cours pour l'utilisateur %s", len(courses), email)
+		log.Printf("Checking %d courses for user %s", len(courses), email)
 
-		// Pour chaque cours
+		// For each course
 		for courseCode := range courses {
-			log.Printf("Vérification du cours %s pour l'utilisateur %s", courseCode, email)
+			log.Printf("Checking course %s for user %s", courseCode, email)
 
-			// Récupérer la note depuis UQAM
+			// Get grade from UQAM
 			newGrade, err := grade.FetchGrade(token, "20251", courseCode)
 			if err != nil {
-				log.Printf("Erreur pour le cours %s de l'utilisateur %s: %v", courseCode, email, err)
+				log.Printf("Error for course %s of user %s: %v", courseCode, email, err)
 				continue
 			}
 
-			// Mettre à jour la note si elle a changé
+			// Update grade if it changed
 			change, err := courseStore.UpdateGrade(email, "20251", courseCode, newGrade)
 			if err != nil {
-				log.Printf("Erreur lors de la mise à jour de la note pour le cours %s de l'utilisateur %s: %v", courseCode, email, err)
+				log.Printf("Error updating grade for course %s of user %s: %v", courseCode, email, err)
 				continue
 			}
 
-			// Si la note a changé, envoyer une notification
+			// If grade changed, send notification
 			if change != nil {
-				subject := "Modification de note"
-				body := fmt.Sprintf("La note du cours %s a été modifiée de %s à %s.", courseCode, change.OldGrade, change.NewGrade)
+				subject := "Grade Update"
+				body := fmt.Sprintf("Grade for course %s has been changed from %s to %s.", courseCode, change.OldGrade, change.NewGrade)
 
 				if err := alert.SendEmail(cfg.GmailAppPassword, cfg.MailFrom, email, subject, body); err != nil {
-					log.Printf("Erreur lors de l'envoi de la notification pour l'utilisateur %s: %v", email, err)
+					log.Printf("Error sending notification for user %s: %v", email, err)
 					continue
 				}
 
-				log.Printf("Notification envoyée à %s pour le cours %s", email, courseCode)
+				log.Printf("Notification sent to %s for course %s", email, courseCode)
 			}
 		}
 
-		// Attendre un peu entre chaque utilisateur pour ne pas surcharger le serveur UQAM
+		// Wait a bit between each user to avoid overwhelming the UQAM server
 		time.Sleep(2 * time.Second)
 	}
 
-	log.Printf("Vérification des notes terminée")
+	log.Printf("Grade check completed")
 	os.Exit(0)
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/auth"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/db"
 	"github.com/felixlheureux/uqam-grade-notifier/pkg/helper"
-	"github.com/felixlheureux/uqam-grade-notifier/pkg/store"
+	"github.com/felixlheureux/uqam-grade-notifier/pkg/service"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -23,54 +23,63 @@ type Config struct {
 
 func main() {
 	config := &Config{}
-	flag.StringVar(&config.DBConnString, "db", "", "Chaîne de connexion à la base de données PostgreSQL")
-	flag.StringVar(&config.Port, "port", "8080", "Port du serveur")
+	flag.StringVar(&config.DBConnString, "db", "", "PostgreSQL database connection string")
+	flag.StringVar(&config.Port, "port", "8080", "Server port")
 	flag.Parse()
 
-	// Charger la configuration
+	// Load configuration
 	helper.MustLoadConfig("config/dev.config.json", config)
 
-	// Initialiser la connexion à la base de données
+	// Initialize database connection
 	database, err := db.New(config.DBConnString)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer database.Close()
 
-	// Initialiser les stores
-	tokenStore, err := store.NewTokenStore(database)
+	// Initialize services
+	authService, err := service.NewAuthService(database, config.JWTSecret)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	courseStore, err := store.NewCourseStore(database)
+	courseService, err := service.NewCourseService(database)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Initialiser le gestionnaire d'authentification
-	tokenManager := auth.NewTokenManager(config.JWTSecret)
-	handler := auth.NewHandler(tokenStore, tokenManager, courseStore, config.BaseURL, config.GmailAppPassword, config.MailFrom)
+	// Initialize authentication handler
+	handler := auth.NewHandler(authService, courseService, config.BaseURL, config.GmailAppPassword, config.MailFrom)
 
-	// Configurer le serveur Echo
+	// Configure Echo server
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
-	// Routes d'authentification
+	// Authentication routes
 	e.POST("/auth/request-login", handler.RequestLogin)
 	e.GET("/auth/login", handler.Login)
 
-	// Routes des cours (protégées)
+	// Course routes (protected)
 	courses := e.Group("/courses")
 	courses.Use(handler.RequireAuth)
-	courses.POST("/:semester", handler.SaveCourses)
+
+	// GET /courses/{semester}
 	courses.GET("/:semester", handler.GetCourses)
-	courses.DELETE("/:semester/:course", handler.DeleteCourse)
-	courses.PUT("/:semester/:course/grade", handler.UpdateGrade)
+
+	// POST /courses/{semester}
+	courses.POST("/:semester", handler.SaveCourses)
+
+	// DELETE /courses/{semester}
 	courses.DELETE("/:semester", handler.DeleteCourses)
 
-	// Démarrer le serveur
+	// DELETE /courses/{semester}/{course}
+	courses.DELETE("/:semester/:course", handler.DeleteCourse)
+
+	// PUT /courses/{semester}/{course}/grade
+	courses.PUT("/:semester/:course/grade", handler.UpdateGrade)
+
+	// Start server
 	e.Logger.Fatal(e.Start(":" + config.Port))
 }

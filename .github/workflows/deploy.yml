@@ -1,0 +1,50 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  DOCKER_BUILDKIT: 1
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+  ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Podman
+        uses: containers/podman-action@v1.0.0
+
+      - name: Login to Container Registry
+        uses: containers/podman-login-action@v1.0.0
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push server
+        run: |
+          podman build -t ${{ secrets.REGISTRY_URL }}/gnotifier-server:latest -f Dockerfile.server .
+          podman push ${{ secrets.REGISTRY_URL }}/gnotifier-server:latest
+
+      - name: Build and push frontend
+        run: |
+          podman build -t ${{ secrets.REGISTRY_URL }}/gnotifier-frontend:latest -f Dockerfile.frontend .
+          podman push ${{ secrets.REGISTRY_URL }}/gnotifier-frontend:latest
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/gnotifier
+            podman-compose pull
+            podman-compose up -d
+            podman system prune -f 

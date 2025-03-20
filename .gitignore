@@ -176,3 +176,61 @@ main/config/*
 main/data/*
 dist
 .idea
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+
+# Local .terraform directories
+.terraform/
+
+# Sensitive data
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.env
+.env.*
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!openapi.json
+!openapi.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules/
+vendor/
